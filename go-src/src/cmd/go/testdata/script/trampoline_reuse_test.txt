@@ -3,8 +3,8 @@
 # be ignored when computing the distance from the direct call to the
 # already placed trampoline
 [short] skip
-[!ppc64] [!ppc64le] skip
-[aix] skip
+[!GOARCH:ppc64] [!GOARCH:ppc64le] skip
+[GOOS:aix] skip
 
 # Note, this program does not run. Presumably, 'DWORD $0' is simpler to
 # assembly 2^26 or so times.

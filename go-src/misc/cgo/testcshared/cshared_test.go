@@ -31,7 +31,7 @@ var exeSuffix string
 
 var GOOS, GOARCH, GOROOT string
 var installdir, androiddir string
-var libSuffix, libgoname string
+var libgoname string
 
 func TestMain(m *testing.M) {
 	os.Exit(testMain(m))
@@ -43,6 +43,12 @@ func testMain(m *testing.M) int {
 	if testing.Short() && os.Getenv("GO_BUILDER_NAME") == "" {
 		fmt.Printf("SKIP - short mode and $GO_BUILDER_NAME not set\n")
 		os.Exit(0)
+	}
+	if runtime.GOOS == "linux" {
+		if _, err := os.Stat("/etc/alpine-release"); err == nil {
+			fmt.Printf("SKIP - skipping failing test on alpine - go.dev/issue/19938\n")
+			os.Exit(0)
+		}
 	}
 
 	GOOS = goEnv("GOOS")
@@ -146,18 +152,6 @@ func testMain(m *testing.M) int {
 	if err := os.WriteFile("go.mod", []byte("module testcshared\n"), 0666); err != nil {
 		log.Panic(err)
 	}
-
-	// Directory where cgo headers and outputs will be installed.
-	// The installation directory format varies depending on the platform.
-	output, err := exec.Command("go", "list",
-		"-buildmode=c-shared",
-		"-f", "{{.Target}}",
-		"runtime/cgo").CombinedOutput()
-	if err != nil {
-		log.Panicf("go list failed: %v\n%s", err, output)
-	}
-	runtimeCgoTarget := string(bytes.TrimSpace(output))
-	libSuffix = strings.TrimPrefix(filepath.Ext(runtimeCgoTarget), ".")
 
 	defer func() {
 		if installdir != "" {
@@ -294,7 +288,7 @@ func createHeaders() error {
 	if err != nil {
 		return err
 	}
-	libgoname = "libgo." + libSuffix
+	libgoname = "libgo.a"
 
 	args = []string{"go", "build", "-buildmode=c-shared", "-o", filepath.Join(installdir, libgoname), "./libgo"}
 	cmd = exec.Command(args[0], args[1:]...)
@@ -572,7 +566,7 @@ func TestUnexportedSymbols(t *testing.T) {
 
 	cmd := "testp2"
 	bin := cmdToRun(cmd)
-	libname := "libgo2." + libSuffix
+	libname := "libgo2.a"
 
 	run(t,
 		nil,
@@ -630,7 +624,7 @@ func TestMainExportedOnAndroid(t *testing.T) {
 }
 
 func testSignalHandlers(t *testing.T, pkgname, cfile, cmd string) {
-	libname := pkgname + "." + libSuffix
+	libname := pkgname + ".a"
 	run(t,
 		nil,
 		"go", "build",
@@ -832,7 +826,7 @@ func TestGo2C2Go(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpdir)
 
-	lib := filepath.Join(tmpdir, "libtestgo2c2go."+libSuffix)
+	lib := filepath.Join(tmpdir, "libtestgo2c2go.a")
 	var env []string
 	if GOOS == "windows" && strings.HasSuffix(lib, ".a") {
 		env = append(env, "CGO_LDFLAGS=-Wl,--out-implib,"+lib, "CGO_LDFLAGS_ALLOW=.*")
