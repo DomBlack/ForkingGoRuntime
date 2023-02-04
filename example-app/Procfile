@@ -1,0 +1,2 @@
+user-svc: ../go-src/bin/go run ./user-svc
+todo-svc: ../go-src/bin/go run ./todo-svc

@@ -1,0 +1,20 @@
+diff --git a/go-src/src/runtime/proc.go b/go-src/src/runtime/proc.go
+index 08fe441a0c..6b6aa34af2 100644
+--- a/go-src/src/runtime/proc.go
++++ b/go-src/src/runtime/proc.go
+@@ -3478,6 +3478,7 @@ func goexit1() {
+ 
+ // goexit continuation on g0.
+ func goexit0(gp *g) {
++	println("goexit0")
+ 	_g_ := getg()
+ 	_p_ := _g_.m.p.ptr()
+ 
+@@ -4110,6 +4111,7 @@ func newproc(fn *funcval) {
+ // address of the go statement that created this. The caller is responsible
+ // for adding the new g to the scheduler.
+ func newproc1(fn *funcval, callergp *g, callerpc uintptr) *g {
++	println("Go Routine start")
+ 	_g_ := getg()
+ 
+ 	if fn == nil {
