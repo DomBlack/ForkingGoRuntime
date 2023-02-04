@@ -1,15 +1,24 @@
 package main
 
 import (
-	"net/http"
-
-	"github.com/DomBlack/ForkingGoRuntime/example-app/pkg/httpsrv"
+	"github.com/DomBlack/ForkingGoRuntime/example-app/pkg/rest"
+	"github.com/DomBlack/ForkingGoRuntime/example-app/user-svc/users"
 )
 
 func main() {
-	httpsrv.Start("user-svc", 8091, http.HandlerFunc(defaultHandler))
+	srv := rest.NewServer("user", users.Port)
+
+	rest.Post(srv, "/check-auth", CheckAuth)
+
+	srv.Start()
 }
 
-func defaultHandler(w http.ResponseWriter, _ *http.Request) {
-	_, _ = w.Write([]byte("Hello World!"))
+func CheckAuth(_ *rest.Context, p *users.CheckAuthParams) (*users.User, error) {
+	switch p.Token {
+	case "secret":
+		return &users.User{ID: 1}, nil
+
+	default:
+		return nil, rest.Unauthorized("invalid token")
+	}
 }

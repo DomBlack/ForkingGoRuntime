@@ -6,7 +6,7 @@ index 554a60d747..4f894da277 100644
 
  // The main goroutine.
  func main() {
-+	println("Go main start")
++	print("Go main exit")
  	mp := getg().m
 
  	// Racectx of m0->g0 is used only as the parent of the main goroutine.
@@ -14,7 +14,7 @@ index 554a60d747..4f894da277 100644
  	}
  	runExitHooks(0)
 
-+	println("Go main exit")
++	print("Go main exit")
 +
  	exit(0)
  	for {

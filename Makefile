@@ -16,6 +16,13 @@ build-go: clean
 	@echo "Building Go from source..."
 	@cd go-src/src && ./make.bash
 
+initdb:
+	@rm -rf example-app/pgdata
+	@initdb -D example-app/pgdata
+
+postgres:
+	@postgres -D example-app/pgdata -p 5432
+
 patch:
 	@echo "Creating patch..."
 	@git diff go-src > patch.diff
@@ -40,7 +47,7 @@ jaeger:
       -p 14269:14269 \
       -p 9411:9411 \
       jaegertracing/all-in-one:1.41
-    $(shell open http://localhost:16686)
+#    x := $(shell open http://localhost:16686)
 
 microservices: clean
 	@cd example-app; \
