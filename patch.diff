@@ -1,37 +1,227 @@
+diff --git a/go-src/src/net/http/h2_bundle.go b/go-src/src/net/http/h2_bundle.go
+index 1e0b83d493..3756355b96 100644
+--- a/go-src/src/net/http/h2_bundle.go
++++ b/go-src/src/net/http/h2_bundle.go
+@@ -6045,7 +6045,9 @@ func (sc *http2serverConn) runHandler(rw *http2responseWriter, req *Request, han
+ 			return
+ 		}
+ 		rw.handlerDone()
++		tracingHandlerEnd(didPanic)
+ 	}()
++	tracingHandlerStart(req)
+ 	handler(rw, req)
+ 	didPanic = false
+ }
+diff --git a/go-src/src/net/http/server.go b/go-src/src/net/http/server.go
+index c3c3f91d9a..0ed21233dc 100644
+--- a/go-src/src/net/http/server.go
++++ b/go-src/src/net/http/server.go
+@@ -13,6 +13,7 @@ import (
+ 	"crypto/tls"
+ 	"errors"
+ 	"fmt"
++	"golang.org/x/net/http/httpguts"
+ 	"internal/godebug"
+ 	"io"
+ 	"log"
+@@ -29,8 +30,6 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+-
+-	"golang.org/x/net/http/httpguts"
+ )
+ 
+ // Errors used by the HTTP server.
+@@ -1847,12 +1846,19 @@ func (c *conn) serve(ctx context.Context) {
+ 	c.remoteAddr = c.rwc.RemoteAddr().String()
+ 	ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr())
+ 	var inFlightResponse *response
++	var didPanic bool
+ 	defer func() {
+ 		if err := recover(); err != nil && err != ErrAbortHandler {
+ 			const size = 64 << 10
+ 			buf := make([]byte, size)
+ 			buf = buf[:runtime.Stack(buf, false)]
+ 			c.server.logf("http: panic serving %v: %v\n%s", c.remoteAddr, err, buf)
++
++			// If we're here, then we panicked from inside the handler.
++			// and need to trigger the end of the tracing
++			if didPanic {
++				tracingHandlerEnd(true)
++			}
+ 		}
+ 		if inFlightResponse != nil {
+ 			inFlightResponse.cancelCtx()
+@@ -1992,13 +1998,23 @@ func (c *conn) serve(ctx context.Context) {
+ 		// But we're not going to implement HTTP pipelining because it
+ 		// was never deployed in the wild and the answer is HTTP/2.
+ 		inFlightResponse = w
++
++		// Trace the start of the request
++		tracingHandlerStart(w.req)
++		didPanic = true
+ 		serverHandler{c.server}.ServeHTTP(w, w.req)
++		didPanic = false
++
+ 		inFlightResponse = nil
+ 		w.cancelCtx()
+ 		if c.hijacked() {
+ 			return
+ 		}
+ 		w.finishRequest()
++
++		// Trace the end of the request
++		tracingHandlerEnd(false)
++
+ 		c.rwc.SetWriteDeadline(time.Time{})
+ 		if !w.shouldReuseConnection() {
+ 			if w.requestBodyLimitHit || w.closedRequestBodyEarly() {
+diff --git a/go-src/src/net/http/tracing.go b/go-src/src/net/http/tracing.go
+index d02cfda642..97b482fa3b 100644
+--- a/go-src/src/net/http/tracing.go
++++ b/go-src/src/net/http/tracing.go
+@@ -1 +1,20 @@
+ package http
++
++import (
++	_ "unsafe"
++)
++
++// tracingHandlerStart is called when a HTTP request starts.
++func tracingHandlerStart(req *Request)
++
++// tracingHandlerEnd is called when a HTTP request ends.
++//
++// If the handler panicked, didPanic will be true
++// otherwise it will be false.
++func tracingHandlerEnd(didPanic bool)
++
++// tracingStartRoundTrip is called when a HTTP request starts.
++func tracingStartRoundTrip(req *Request)
++
++// tracingEndRoundTrip is called when a HTTP request ends.
++func tracingEndRoundTrip(resp *Response, err error)
+diff --git a/go-src/src/net/http/transport.go b/go-src/src/net/http/transport.go
+index ddcb64815c..da5d3b6e89 100644
+--- a/go-src/src/net/http/transport.go
++++ b/go-src/src/net/http/transport.go
+@@ -17,6 +17,8 @@ import (
+ 	"crypto/tls"
+ 	"errors"
+ 	"fmt"
++	"golang.org/x/net/http/httpguts"
++	"golang.org/x/net/http/httpproxy"
+ 	"internal/godebug"
+ 	"io"
+ 	"log"
+@@ -30,9 +32,6 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+-
+-	"golang.org/x/net/http/httpguts"
+-	"golang.org/x/net/http/httpproxy"
+ )
+ 
+ // DefaultTransport is the default implementation of Transport and is
+@@ -509,7 +508,12 @@ func (t *Transport) alternateRoundTripper(req *Request) RoundTripper {
+ }
+ 
+ // roundTrip implements a RoundTripper over HTTP.
+-func (t *Transport) roundTrip(req *Request) (*Response, error) {
++func (t *Transport) roundTrip(req *Request) (returnResp *Response, returnErr error) {
++	tracingStartRoundTrip(req)
++	defer func() {
++		tracingEndRoundTrip(returnResp, returnErr)
++	}()
++
+ 	t.nextProtoOnce.Do(t.onceSetNextProtoDefaults)
+ 	ctx := req.Context()
+ 	trace := httptrace.ContextClientTrace(ctx)
 diff --git a/go-src/src/runtime/proc.go b/go-src/src/runtime/proc.go
-index 554a60d747..4f894da277 100644
+index 554a60d747..bea66d54a5 100644
 --- a/go-src/src/runtime/proc.go
 +++ b/go-src/src/runtime/proc.go
-@@ -143,6 +143,7 @@ var initSigmask sigset
-
- // The main goroutine.
- func main() {
-+	print("Go main exit")
- 	mp := getg().m
-
- 	// Racectx of m0->g0 is used only as the parent of the main goroutine.
-@@ -271,6 +272,8 @@ func main() {
- 	}
- 	runExitHooks(0)
-
-+	print("Go main exit")
-+
- 	exit(0)
- 	for {
- 		var x *int32
-@@ -3625,6 +3628,7 @@ func goexit1() {
-
- // goexit continuation on g0.
- func goexit0(gp *g) {
-+	println("Go Routine exit")
+@@ -3628,6 +3628,12 @@ func goexit0(gp *g) {
  	mp := getg().m
  	pp := mp.p.ptr()
-
-@@ -4257,6 +4261,7 @@ func newproc(fn *funcval) {
- // address of the go statement that created this. The caller is responsible
- // for adding the new g to the scheduler.
- func newproc1(fn *funcval, callergp *g, callerpc uintptr) *g {
-+	println("Go Routine start")
- 	if fn == nil {
- 		fatal("go of nil func value")
+ 
++	// If we have trace data, then we need to call the exit hook.
++	// to let our library know it's exiting
++	if traceData := gp.traceData; traceData != nil {
++		tracingGExit(gp.goid, traceData)
++	}
++
+ 	casgstatus(gp, _Grunning, _Gdead)
+ 	gcController.addScannableStack(pp, -int64(gp.stack.hi-gp.stack.lo))
+ 	if isSystemGoroutine(gp, false) {
+@@ -4342,6 +4348,13 @@ func newproc1(fn *funcval, callergp *g, callerpc uintptr) *g {
+ 	if trace.enabled {
+ 		traceGoCreate(newg, newg.startpc)
  	}
++
++	// Call our trace goroutine start hook if we have trace
++	// data on the current goroutine.
++	if traceData := callergp.traceData; callergp != nil {
++		newg.traceData = tracingGStart(newg.goid, traceData)
++	}
++
+ 	releasem(mp)
+ 
+ 	return newg
+diff --git a/go-src/src/runtime/runtime2.go b/go-src/src/runtime/runtime2.go
+index 9381d1e3f7..31c8982aec 100644
+--- a/go-src/src/runtime/runtime2.go
++++ b/go-src/src/runtime/runtime2.go
+@@ -489,6 +489,10 @@ type g struct {
+ 	timer          *timer         // cached timer for time.Sleep
+ 	selectDone     atomic.Uint32  // are we participating in a select and did someone win the race?
+ 
++	// traceData is a pointer to a trace object
++	// that we will define later in our library code
++	traceData unsafe.Pointer
++
+ 	// goroutineProfiled indicates the status of this goroutine's stack for the
+ 	// current in-progress goroutine profile
+ 	goroutineProfiled goroutineProfileStateHolder
+diff --git a/go-src/src/runtime/tracing.go b/go-src/src/runtime/tracing.go
+index 7ccdf5f690..9af043edca 100644
+--- a/go-src/src/runtime/tracing.go
++++ b/go-src/src/runtime/tracing.go
+@@ -1 +1,35 @@
+ package runtime
++
++import (
++	"unsafe"
++)
++
++// tracingGStart is called when a goroutine starts. It returns a pointer to a
++// the parent routines trace data, and is expected to return a pointer to the
++// new routines trace data.
++//
++// If the parent Go routine has no tracing data, this won't get called
++// thus it is always safe to assume parent is non-nil
++func tracingGStart(goRoutinueID uint64, parentTraceData unsafe.Pointer) unsafe.Pointer
++
++// tracingGExit is called when a goroutine exits. It is passed a pointer to the
++// trace data of the exiting goroutine.
++//
++// If no tracing data is available, this won't get called
++// thus it is always safe to assume parent is non-nil
++func tracingGExit(goRoutinueID uint64, traceData unsafe.Pointer)
++
++// tracingAttachDataToG attaches the given data to the current goroutine.
++func tracingAttachDataToG(data unsafe.Pointer) {
++	getg().traceData = data
++}
++
++// tracingGetDataFromG returns the tracing data attached to the current goroutine.
++func tracingGetDataFromG() unsafe.Pointer {
++	return getg().traceData
++}
++
++// getgoid returns the ID of the current goroutine.
++func getgoid() uint64 {
++	return getg().goid
++}

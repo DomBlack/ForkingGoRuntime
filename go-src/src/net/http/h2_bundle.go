@@ -6045,7 +6045,9 @@ func (sc *http2serverConn) runHandler(rw *http2responseWriter, req *Request, han
 			return
 		}
 		rw.handlerDone()
+		tracingHandlerEnd(didPanic)
 	}()
+	tracingHandlerStart(req)
 	handler(rw, req)
 	didPanic = false
 }

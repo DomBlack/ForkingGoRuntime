@@ -489,6 +489,10 @@ type g struct {
 	timer          *timer         // cached timer for time.Sleep
 	selectDone     atomic.Uint32  // are we participating in a select and did someone win the race?
 
+	// traceData is a pointer to a trace object
+	// that we will define later in our library code
+	traceData unsafe.Pointer
+
 	// goroutineProfiled indicates the status of this goroutine's stack for the
 	// current in-progress goroutine profile
 	goroutineProfiled goroutineProfileStateHolder

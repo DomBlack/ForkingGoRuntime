@@ -14,6 +14,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	_ "github.com/DomBlack/ForkingGoRuntime/example-app/pkg/tracing"
 )
 
 // Server is a simple HTTP server with registered handlers

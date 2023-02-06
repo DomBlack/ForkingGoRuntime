@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"golang.org/x/net/http/httpguts"
 	"internal/godebug"
 	"io"
 	"log"
@@ -29,8 +30,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/http/httpguts"
 )
 
 // Errors used by the HTTP server.
@@ -1847,12 +1846,19 @@ func (c *conn) serve(ctx context.Context) {
 	c.remoteAddr = c.rwc.RemoteAddr().String()
 	ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr())
 	var inFlightResponse *response
+	var didPanic bool
 	defer func() {
 		if err := recover(); err != nil && err != ErrAbortHandler {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
 			c.server.logf("http: panic serving %v: %v\n%s", c.remoteAddr, err, buf)
+
+			// If we're here, then we panicked from inside the handler.
+			// and need to trigger the end of the tracing
+			if didPanic {
+				tracingHandlerEnd(true)
+			}
 		}
 		if inFlightResponse != nil {
 			inFlightResponse.cancelCtx()
@@ -1992,13 +1998,23 @@ func (c *conn) serve(ctx context.Context) {
 		// But we're not going to implement HTTP pipelining because it
 		// was never deployed in the wild and the answer is HTTP/2.
 		inFlightResponse = w
+
+		// Trace the start of the request
+		tracingHandlerStart(w.req)
+		didPanic = true
 		serverHandler{c.server}.ServeHTTP(w, w.req)
+		didPanic = false
+
 		inFlightResponse = nil
 		w.cancelCtx()
 		if c.hijacked() {
 			return
 		}
 		w.finishRequest()
+
+		// Trace the end of the request
+		tracingHandlerEnd(false)
+
 		c.rwc.SetWriteDeadline(time.Time{})
 		if !w.shouldReuseConnection() {
 			if w.requestBodyLimitHit || w.closedRequestBodyEarly() {

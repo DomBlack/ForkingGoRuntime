@@ -3628,6 +3628,12 @@ func goexit0(gp *g) {
 	mp := getg().m
 	pp := mp.p.ptr()
 
+	// If we have trace data, then we need to call the exit hook.
+	// to let our library know it's exiting
+	if traceData := gp.traceData; traceData != nil {
+		tracingGExit(gp.goid, traceData)
+	}
+
 	casgstatus(gp, _Grunning, _Gdead)
 	gcController.addScannableStack(pp, -int64(gp.stack.hi-gp.stack.lo))
 	if isSystemGoroutine(gp, false) {
@@ -4342,6 +4348,13 @@ func newproc1(fn *funcval, callergp *g, callerpc uintptr) *g {
 	if trace.enabled {
 		traceGoCreate(newg, newg.startpc)
 	}
+
+	// Call our trace goroutine start hook if we have trace
+	// data on the current goroutine.
+	if traceData := callergp.traceData; callergp != nil {
+		newg.traceData = tracingGStart(newg.goid, traceData)
+	}
+
 	releasem(mp)
 
 	return newg

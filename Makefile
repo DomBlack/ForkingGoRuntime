@@ -8,7 +8,7 @@ endef
 default:
 	@echo "Select make target..."
 
-clean:
+clean: patch
 	@echo "Resetting Go to clean state..."
 	@git restore go-src
 
@@ -49,6 +49,6 @@ jaeger:
       jaegertracing/all-in-one:1.41
 #    x := $(shell open http://localhost:16686)
 
-microservices: clean
+microservices:
 	@cd example-app; \
 	overmind start || true
