@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/DomBlack/ForkingGoRuntime/example-app/pkg/tracing"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -28,6 +29,8 @@ type Server struct {
 
 // NewServer creates a new Server
 func NewServer(name string, port int) *Server {
+	tracing.Init(name)
+
 	router := httprouter.New()
 
 	router.NotFound = notFoundHandler

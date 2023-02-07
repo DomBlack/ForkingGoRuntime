@@ -14,7 +14,7 @@ func tracingHandlerStart(req *Request)
 func tracingHandlerEnd(didPanic bool)
 
 // tracingStartRoundTrip is called when a HTTP request starts.
-func tracingStartRoundTrip(req *Request)
+func tracingStartRoundTrip(req *Request) *Request
 
 // tracingEndRoundTrip is called when a HTTP request ends.
 func tracingEndRoundTrip(resp *Response, err error)

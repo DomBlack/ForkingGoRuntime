@@ -43,7 +43,11 @@ func ListTodos(ctx *rest.Context) ([]*todos.Todo, error) {
 	}
 
 	// Query the database
-	rows, err := database.Query("SELECT id, user_id, title, created, completed FROM todos WHERE user_id = $1", userID)
+	rows, err := database.QueryContext(
+		ctx,
+		"SELECT id, user_id, title, created, completed FROM todos WHERE user_id = $1",
+		userID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +89,8 @@ func CreateTodo(ctx *rest.Context, p *todos.CreateParams) (*todos.Todo, error) {
 
 	// Insert into the database
 	var todo todos.Todo
-	err = database.QueryRow(""+
+	err = database.QueryRowContext(
+		ctx,
 		"INSERT INTO todos (user_id, title) VALUES ($1, $2) RETURNING id, user_id, title, created, completed",
 		userID, p.Title,
 	).Scan(&todo.ID, &todo.User, &todo.Title, &todo.Created, &todo.Completed)
@@ -118,7 +123,8 @@ func ReadTodo(ctx *rest.Context) (*todos.Todo, error) {
 
 	// Query the database
 	var todo todos.Todo
-	err = database.QueryRow(""+
+	err = database.QueryRowContext(
+		ctx,
 		"SELECT id, user_id, title, created, completed FROM todos WHERE id = $1 AND user_id = $2",
 		todoID, userID,
 	).Scan(&todo.ID, &todo.User, &todo.Title, &todo.Created, &todo.Completed)
@@ -170,7 +176,8 @@ func UpdateTodo(ctx *rest.Context, p *todos.UpdateParams) (*todos.Todo, error) {
 	}
 
 	// Save the todo
-	_, err = database.Exec(
+	_, err = database.ExecContext(
+		ctx,
 		"UPDATE todos SET title = $1, completed = $2 WHERE id = $3 AND user_id = $4",
 		todo.Title, todo.Completed, todoID, userID,
 	)
@@ -203,7 +210,8 @@ func DeleteTodo(ctx *rest.Context) (*todos.Todo, error) {
 
 	// Delete from the database
 	var todo todos.Todo
-	err = database.QueryRow(""+
+	err = database.QueryRowContext(
+		ctx,
 		"DELETE FROM todos WHERE id = $1 AND user_id = $2 RETURNING id, user_id, title, created, completed",
 		todoID, userID,
 	).Scan(&todo.ID, &todo.User, &todo.Title, &todo.Created, &todo.Completed)

@@ -509,7 +509,7 @@ func (t *Transport) alternateRoundTripper(req *Request) RoundTripper {
 
 // roundTrip implements a RoundTripper over HTTP.
 func (t *Transport) roundTrip(req *Request) (returnResp *Response, returnErr error) {
-	tracingStartRoundTrip(req)
+	req = tracingStartRoundTrip(req)
 	defer func() {
 		tracingEndRoundTrip(returnResp, returnErr)
 	}()

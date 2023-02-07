@@ -3,15 +3,15 @@
 package tracing
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	// unsafe allows us to use go:linkname
 	_ "unsafe"
 
 	"github.com/rs/zerolog/log"
-)
-
-const (
-	tracingHeader = "X-Correlation-Id"
+	"go.opentelemetry.io/otel/semconv/v1.17.0/httpconv"
+	"go.opentelemetry.io/otel/trace"
 )
 
 //go:linkname handlerStart net/http.tracingHandlerStart
@@ -23,23 +23,24 @@ func handlerStart(req *http.Request) {
 		panic("go routine already has tracing data")
 	}
 
-	// Get the trace ID from the request header
-	traceContext, err := ParseTraceContext(req.Header.Get(tracingHeader))
-	if err != nil {
-		// If the trace context is invalid, create a new one
-		traceContext = NewTraceContext()
-	} else {
-		// If the trace context is valid, create s new span under it
-		traceContext = traceContext.NewSpan()
-	}
-
+	// Start tracing the go routine
 	traceData := &goRoutineTraceData{
 		goRoutineID: goRoutineID(),
-		context:     traceContext,
 	}
 	goRoutineAttachData(traceData)
 
-	log.Info().Str("_trace", traceContext.String()).Str("method", req.Method).Str("path", req.URL.Path).Msg("> request started")
+	// Get the trace ID from the request header
+	parentTrace, _ := ParseTraceContext(req.Header.Get(traceContextHeader))
+
+	// Start a span
+	startSpan(
+		fmt.Sprintf("Handle: %s %s", req.Method, req.URL.Path),
+		parentTrace,
+		trace.SpanKindServer,
+		httpconv.ServerRequest("", req)...,
+	)
+
+	log.Info().Str("_trace", traceData.context.String()).Str("method", req.Method).Str("path", req.URL.Path).Msg("> request started")
 }
 
 //go:linkname handlerEnd net/http.tracingHandlerEnd
@@ -53,19 +54,62 @@ func handlerEnd(didPanic bool) {
 		panic("go routine has no tracing data")
 	}
 
-	log.Info().Str("_trace", traceData.context.String()).Msg("> request ended")
+	// log.Info().Str("_trace", traceData.context.String()).Msg("> request ended")
+	if didPanic {
+		endSpan(fmt.Errorf("panicked"))
+	} else {
+		endSpan(nil)
+	}
+
 	goRoutineClearData()
 }
 
 //go:linkname startRoundTrip net/http.tracingStartRoundTrip
-func startRoundTrip(req *http.Request) {
+func startRoundTrip(req *http.Request) *http.Request {
 	traceData := goRoutineGetData()
 	if traceData == nil {
 		// We're not tracing this request, so we don't need to do anything
-		return
+		return req
 	}
 
-	req.Header.Set(tracingHeader, traceData.context.String())
+	startSpan(
+		fmt.Sprintf("Call: %s %s", req.Method, req.URL.String()),
+		nil,
+		trace.SpanKindClient,
+		httpconv.ClientRequest(req)...,
+	)
+
+	ctxWithTracer := httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		GetConn: func(hostPort string) {
+			recordEvent("Getting connection")
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			recordEvent("Got Connection")
+		},
+		PutIdleConn: nil,
+		GotFirstResponseByte: func() {
+			recordEvent("Received first byte")
+		},
+		DNSStart: func(info httptrace.DNSStartInfo) {
+			recordEvent(fmt.Sprintf("DNS loookup of %s", info.Host))
+		},
+		DNSDone: func(info httptrace.DNSDoneInfo) {
+			recordEvent(fmt.Sprintf("DNS resolved to %s", info.Addrs))
+		},
+		ConnectStart: func(network, addr string) {
+			recordEvent(fmt.Sprintf("Connecting to %s %s", network, addr))
+		},
+		ConnectDone: func(network, addr string, err error) {
+			recordEvent(fmt.Sprintf("Connected to %s %s", network, addr))
+		},
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			recordEvent("Request sent")
+		},
+	})
+
+	req.Header.Set(traceContextHeader, traceData.context.String())
+
+	return req.WithContext(ctxWithTracer)
 }
 
 //go:linkname endRoundTrip net/http.tracingEndRoundTrip
@@ -75,4 +119,6 @@ func endRoundTrip(resp *http.Response, err error) {
 		// We're not tracing this request, so we don't need to do anything
 		return
 	}
+
+	endSpan(err, httpconv.ClientResponse(resp)...)
 }

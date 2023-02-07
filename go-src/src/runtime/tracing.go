@@ -10,7 +10,7 @@ import (
 //
 // If the parent Go routine has no tracing data, this won't get called
 // thus it is always safe to assume parent is non-nil
-func tracingGStart(goRoutinueID uint64, parentTraceData unsafe.Pointer) unsafe.Pointer
+func tracingGStart(pc uintptr, goRoutinueID uint64, parentTraceData unsafe.Pointer) unsafe.Pointer
 
 // tracingGExit is called when a goroutine exits. It is passed a pointer to the
 // trace data of the exiting goroutine.

@@ -1656,7 +1656,9 @@ func (db *DB) exec(ctx context.Context, query string, args []any, strategy connR
 }
 
 func (db *DB) execDC(ctx context.Context, dc *driverConn, release func(error), query string, args []any) (res Result, err error) {
+	tracingQueryStart(query)
 	defer func() {
+		tracingQueryEnd(err)
 		release(err)
 	}()
 	execerCtx, ok := dc.ci.(driver.ExecerContext)
@@ -1730,7 +1732,12 @@ func (db *DB) query(ctx context.Context, query string, args []any, strategy conn
 // The connection gets released by the releaseConn function.
 // The ctx context is from a query method and the txctx context is from an
 // optional transaction context.
-func (db *DB) queryDC(ctx, txctx context.Context, dc *driverConn, releaseConn func(error), query string, args []any) (*Rows, error) {
+func (db *DB) queryDC(ctx, txctx context.Context, dc *driverConn, releaseConn func(error), query string, args []any) (rtn *Rows, rtnErr error) {
+	tracingQueryStart(query)
+	defer func() {
+		tracingQueryEnd(rtnErr)
+	}()
+
 	queryerCtx, ok := dc.ci.(driver.QueryerContext)
 	var queryer driver.Queryer
 	if !ok {

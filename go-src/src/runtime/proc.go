@@ -4352,7 +4352,7 @@ func newproc1(fn *funcval, callergp *g, callerpc uintptr) *g {
 	// Call our trace goroutine start hook if we have trace
 	// data on the current goroutine.
 	if traceData := callergp.traceData; callergp != nil {
-		newg.traceData = tracingGStart(newg.goid, traceData)
+		newg.traceData = tracingGStart(fn.fn, newg.goid, traceData)
 	}
 
 	releasem(mp)

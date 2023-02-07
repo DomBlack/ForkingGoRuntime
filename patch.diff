@@ -31,7 +31,7 @@ index c3c3f91d9a..0ed21233dc 100644
 -
 -	"golang.org/x/net/http/httpguts"
  )
- 
+
  // Errors used by the HTTP server.
 @@ -1847,12 +1846,19 @@ func (c *conn) serve(ctx context.Context) {
  	c.remoteAddr = c.rwc.RemoteAddr().String()
@@ -123,11 +123,11 @@ index ddcb64815c..da5d3b6e89 100644
 -	"golang.org/x/net/http/httpguts"
 -	"golang.org/x/net/http/httpproxy"
  )
- 
+
  // DefaultTransport is the default implementation of Transport and is
 @@ -509,7 +508,12 @@ func (t *Transport) alternateRoundTripper(req *Request) RoundTripper {
  }
- 
+
  // roundTrip implements a RoundTripper over HTTP.
 -func (t *Transport) roundTrip(req *Request) (*Response, error) {
 +func (t *Transport) roundTrip(req *Request) (returnResp *Response, returnErr error) {
@@ -146,7 +146,7 @@ index 554a60d747..bea66d54a5 100644
 @@ -3628,6 +3628,12 @@ func goexit0(gp *g) {
  	mp := getg().m
  	pp := mp.p.ptr()
- 
+
 +	// If we have trace data, then we need to call the exit hook.
 +	// to let our library know it's exiting
 +	if traceData := gp.traceData; traceData != nil {
@@ -168,7 +168,7 @@ index 554a60d747..bea66d54a5 100644
 +	}
 +
  	releasem(mp)
- 
+
  	return newg
 diff --git a/go-src/src/runtime/runtime2.go b/go-src/src/runtime/runtime2.go
 index 9381d1e3f7..31c8982aec 100644
@@ -177,7 +177,7 @@ index 9381d1e3f7..31c8982aec 100644
 @@ -489,6 +489,10 @@ type g struct {
  	timer          *timer         // cached timer for time.Sleep
  	selectDone     atomic.Uint32  // are we participating in a select and did someone win the race?
- 
+
 +	// traceData is a pointer to a trace object
 +	// that we will define later in our library code
 +	traceData unsafe.Pointer
