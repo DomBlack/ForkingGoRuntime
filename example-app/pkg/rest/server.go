@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	_ "github.com/DomBlack/ForkingGoRuntime/example-app/pkg/tracing"
+
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

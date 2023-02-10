@@ -49,6 +49,6 @@ jaeger:
       jaegertracing/all-in-one:1.41
 #    x := $(shell open http://localhost:16686)
 
-microservices: clean
+microservices:
 	@cd example-app; \
 	overmind start || true

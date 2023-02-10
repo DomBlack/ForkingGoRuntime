@@ -17,6 +17,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"golang.org/x/net/http/httpguts"
+	"golang.org/x/net/http/httpproxy"
 	"internal/godebug"
 	"io"
 	"log"
@@ -30,9 +32,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/http/httpguts"
-	"golang.org/x/net/http/httpproxy"
 )
 
 // DefaultTransport is the default implementation of Transport and is
@@ -509,7 +508,12 @@ func (t *Transport) alternateRoundTripper(req *Request) RoundTripper {
 }
 
 // roundTrip implements a RoundTripper over HTTP.
-func (t *Transport) roundTrip(req *Request) (*Response, error) {
+func (t *Transport) roundTrip(req *Request) (returnResp *Response, returnErr error) {
+	tracingStartRoundTrip(req)
+	defer func() {
+		tracingEndRoundTrip(returnResp, returnErr)
+	}()
+
 	t.nextProtoOnce.Do(t.onceSetNextProtoDefaults)
 	ctx := req.Context()
 	trace := httptrace.ContextClientTrace(ctx)
