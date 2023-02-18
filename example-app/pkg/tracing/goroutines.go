@@ -48,10 +48,6 @@ func goRoutineGetData() *goRoutineTraceData
 //go:linkname goRoutineID runtime.getgoid
 func goRoutineID() uint64
 
-func goRoutineClearData() {
-	goRoutineAttachData(nil)
-}
-
 func callingFunc(pc uintptr) string {
 	cf := runtime.CallersFrames([]uintptr{pc})
 	frame, _ := cf.Next()

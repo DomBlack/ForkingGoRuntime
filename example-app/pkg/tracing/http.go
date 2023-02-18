@@ -9,7 +9,6 @@ import (
 	// unsafe allows us to use go:linkname
 	_ "unsafe"
 
-	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel/semconv/v1.17.0/httpconv"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -24,10 +23,7 @@ func handlerStart(req *http.Request) {
 	}
 
 	// Start tracing the go routine
-	traceData := &goRoutineTraceData{
-		goRoutineID: goRoutineID(),
-	}
-	goRoutineAttachData(traceData)
+	goRoutineAttachData(&goRoutineTraceData{goRoutineID: goRoutineID()})
 
 	// Get the trace ID from the request header
 	parentTrace, _ := ParseTraceContext(req.Header.Get(traceContextHeader))
@@ -39,29 +35,23 @@ func handlerStart(req *http.Request) {
 		trace.SpanKindServer,
 		httpconv.ServerRequest("", req)...,
 	)
-
-	log.Info().Str("_trace", traceData.context.String()).Str("method", req.Method).Str("path", req.URL.Path).Msg("> request started")
 }
 
 //go:linkname handlerEnd net/http.tracingHandlerEnd
 func handlerEnd(didPanic bool) {
-	traceData := goRoutineGetData()
-
 	// Sanity check we're tracing, this should never happen
 	// as the handlerStart function should always be called before
 	// the request ends
-	if traceData == nil {
+	if goRoutineGetData() == nil {
 		panic("go routine has no tracing data")
 	}
 
-	// log.Info().Str("_trace", traceData.context.String()).Msg("> request ended")
+	var err error
 	if didPanic {
-		endSpan(fmt.Errorf("panicked"))
-	} else {
-		endSpan(nil)
+		err = fmt.Errorf("panicked")
 	}
-
-	goRoutineClearData()
+	endSpan(err)
+	goRoutineAttachData(nil)
 }
 
 //go:linkname startRoundTrip net/http.tracingStartRoundTrip

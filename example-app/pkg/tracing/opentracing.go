@@ -112,8 +112,10 @@ func recordEvent(name string) {
 		return
 	}
 
-	entry := spans[data.goRoutineID][0]
-	entry.span.AddEvent(name)
+	if len(spans[data.goRoutineID]) > 0 {
+		entry := spans[data.goRoutineID][0]
+		entry.span.AddEvent(name)
+	}
 }
 
 // endSpan ends the current span and removes it from the stack
