@@ -1,3 +1,5 @@
 ./patch.diff
 
 pgdata/
+.vscode
+.idea
