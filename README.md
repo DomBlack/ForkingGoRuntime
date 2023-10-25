@@ -7,8 +7,8 @@ This talk is loosely based on how [Encore](https://encore.dev) uses a rolling fo
 
 ## Talk Videos
 
-- [A 30 minute version, given at at London Gophers](https://www.youtube.com/watch?v=CymVdee2Q8Y)
-- The full 60 minute version (_video coming soon_)
+- [A short version given at a London Gophers meetup](https://www.youtube.com/watch?v=CymVdee2Q8Y)
+- [The full version given at GopherCon UK 2023](https://www.youtube.com/watch?v=MRZU5J29Rys)
 
 ## Example app
 
